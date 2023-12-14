@@ -9,50 +9,50 @@
 #include "CycleTimer.h"
 #include "pthread.h"
 
-const int rozmiar_sudoku = 9;
-int rozmiar_kwadratu = 3;
-int glebokosc_rekursji; //Liczba miejsc, które wątek wypełnia przed odłożeniiem na stos
-static int ilosc_watkow;
+const int sudoku_size = 9;
+int square_size = 3;
+int recursion_depth; //The number of slots a thread fills before pushing it onto the stack
+static int how_many_threads;
 
-class Plansza {
+class Board {
 public:
-      int plansza[rozmiar_sudoku][rozmiar_sudoku]; //tablica sudoku
-      Plansza() {};
+      int sudoku_board[sudoku_size][sudoku_size]; //sudoku board
+      Board() {};
 
-      void wyswietl_tablice()
+      void show_board()
       {
-          for (int i = 0; i < rozmiar_sudoku; i++) {
-              for (int j = 0; j < rozmiar_sudoku; j++)
-                  std::cout << plansza[i][j] << " ";
+          for (int i = 0; i < sudoku_size; i++) {
+              for (int j = 0; j < sudoku_size; j++)
+                  std::cout << sudoku_board[i][j] << " ";
               std::cout << std::endl;
           }
           std::cout << std::endl;
       }
 
-      int ile_wszystkich_pustych() {
+      int how_many_empty_cells() {
           int cnt = 0;
-          for (int i = 0; i < rozmiar_sudoku; i++)
-              for (int j = 0; j < rozmiar_sudoku; j++)
-                  cnt += (plansza[i][j] == 0);
+          for (int i = 0; i < sudoku_size; i++)
+              for (int j = 0; j < sudoku_size; j++)
+                  cnt += (sudoku_board[i][j] == 0);
           return cnt;
       }
 };
 
-bool czy_brak_konfliktow(int matrix[rozmiar_sudoku][rozmiar_sudoku], int wiersz, int kolumna, int numer) {
+bool is_no_conflict(int matrix[sudoku_size][sudoku_size], int row, int col, int number) {
 
-    for (int i = 0; i < rozmiar_sudoku; i++) {
-        if (matrix[i][kolumna] == numer)
+    for (int i = 0; i < sudoku_size; i++) {
+        if (matrix[i][col] == number)
             return false;
     }
 
-    for (int j = 0; j < rozmiar_sudoku; j++) {
-        if (matrix[wiersz][j] == numer)
+    for (int j = 0; j < sudoku_size; j++) {
+        if (matrix[row][j] == number)
             return false;
     }
 
-    for (int i = 0; i < rozmiar_kwadratu; i++) {
-        for (int j = 0; j < rozmiar_kwadratu; j++) {
-            if (matrix[(wiersz / rozmiar_kwadratu) * rozmiar_kwadratu + i][(kolumna / rozmiar_kwadratu) * rozmiar_kwadratu + j] == numer)
+    for (int i = 0; i < square_size; i++) {
+        for (int j = 0; j < square_size; j++) {
+            if (matrix[(row / square_size) * square_size + i][(col / square_size) * square_size + j] == number)
                 return false;
         }
     }
@@ -60,10 +60,10 @@ bool czy_brak_konfliktow(int matrix[rozmiar_sudoku][rozmiar_sudoku], int wiersz,
     return true;
 }
 
-int znajdz_nastepna_pusta(int matrix[rozmiar_sudoku][rozmiar_sudoku], int start) {
+int next_empty_cell_index(int matrix[sudoku_size][sudoku_size], int start) {
     int i;
-    for (i = start; i < rozmiar_sudoku * rozmiar_sudoku; i++) {
-        if (matrix[i / rozmiar_sudoku][i % rozmiar_sudoku] == 0) {
+    for (i = start; i < sudoku_size * sudoku_size; i++) {
+        if (matrix[i / sudoku_size][i % sudoku_size] == 0) {
             return i;
         }
     }
@@ -71,28 +71,28 @@ int znajdz_nastepna_pusta(int matrix[rozmiar_sudoku][rozmiar_sudoku], int start)
 }
 std::mutex mtx;
 
-bool wyszukiwanie_wsteczne(std::stack < std::pair < int, Plansza >>& stk, Plansza b, int indeks, int glebokosc) {
-    int wiersz = indeks / rozmiar_sudoku;
-    int kolumna = indeks % rozmiar_sudoku;
-    //b.wyswietl_tablice();
-    if (indeks >= rozmiar_sudoku * rozmiar_sudoku) { //jesli osiagnieto koniec planszy (rozwiazanie zostalo znalezione)
+bool backtracking(std::stack < std::pair < int, Board >>& stk, Board b, int index, int depth) {
+    int row = index / sudoku_size;
+    int col = index % sudoku_size;
+    //b.show_board();
+    if (index >= sudoku_size * sudoku_size) { //if got end of board (solved sudoku)
         mtx.lock();
-        stk.push(std::pair < int, Plansza >(indeks, b));
+        stk.push(std::pair < int, Board >(index, b));
         mtx.unlock();
         return true;
     }
 
-    if (!glebokosc) { //jesli osiagnieto maksymalna glebokosci rekursji
+    if (!depth) { // if got max depth, than push and exit
         mtx.lock();
-        stk.push(std::pair < int, Plansza >(indeks, b));
+        stk.push(std::pair < int, Board >(index, b));
         mtx.unlock();
         return false;
     }
 
-    for (int k = 1; k <= rozmiar_sudoku; k++) {
-        if (czy_brak_konfliktow(b.plansza, wiersz, kolumna, k)) {
-            b.plansza[wiersz][kolumna] = k;
-            if (wyszukiwanie_wsteczne(stk, b, znajdz_nastepna_pusta(b.plansza, indeks + 1), glebokosc - 1))
+    for (int k = 1; k <= sudoku_size; k++) {
+        if (is_no_conflict(b.sudoku_board, row, col, k)) {
+            b.sudoku_board[row][col] = k;
+            if (backtracking(stk, b, next_empty_cell_index(b.sudoku_board, index + 1), depth - 1))
                 return true;
         }
     }
@@ -100,33 +100,32 @@ bool wyszukiwanie_wsteczne(std::stack < std::pair < int, Plansza >>& stk, Plansz
     return false;
 }
 
-void backtracking_lokalny(Plansza& plansza_sudoku) {
-    std::stack < std::pair < int, Plansza >> stk;
-    std::deque < std::pair < int, Plansza >> vec;
+void local_backtracking(Board& plansza_sudoku) {
+    std::stack < std::pair < int, Board >> stk;
     std::vector < std::thread > threads;
 
     bool czy_ukonczono = false;
 
-    Plansza tmp(plansza_sudoku);
+    Board tmp(plansza_sudoku);
 
-    stk.push(std::pair < int, Plansza >(znajdz_nastepna_pusta(tmp.plansza, 0), tmp));
-    int indeks = znajdz_nastepna_pusta(tmp.plansza, 0);
+    stk.push(std::pair < int, Board >(next_empty_cell_index(tmp.sudoku_board, 0), tmp));
+    int index = next_empty_cell_index(tmp.sudoku_board, 0);
 
-    for (int id = 0; id < ilosc_watkow; id++) {
-            threads.push_back(std::thread([&czy_ukonczono, &vec, id, &stk, &plansza_sudoku]() {
+    for (int id = 0; id < how_many_threads; id++) {
+            threads.push_back(std::thread([&czy_ukonczono, id, &stk, &plansza_sudoku]() {
                 while (!czy_ukonczono) {
                     mtx.lock();
                     if (stk.size()) {
-                        int indeks = stk.top().first; //take indeks of "0"
-                        Plansza b = stk.top().second; //take sudoku map
+                        int index = stk.top().first; //take index of "0"
+                        Board b = stk.top().second; //take sudoku map
                         stk.pop(); //remove first element
                         mtx.unlock();
-                        if (b.ile_wszystkich_pustych() == 0) {
+                        if (b.how_many_empty_cells() == 0) {
                             plansza_sudoku = b;
                             czy_ukonczono = true;
                             break;
                         }
-                        wyszukiwanie_wsteczne(stk, b, indeks, glebokosc_rekursji);
+                        backtracking(stk, b, index, recursion_depth);
                         
                     }
                     else mtx.unlock();
@@ -137,36 +136,33 @@ void backtracking_lokalny(Plansza& plansza_sudoku) {
         thread.join();
 }
 
-
-
 int main() {
-    glebokosc_rekursji = 25;
-    ilosc_watkow = 1;
+    recursion_depth = 25;
+    how_many_threads = 4;
 
+    Board b;
 
-    Plansza b;
-
-    //przypisanie wszystkich wartości z pliku do tablicy sudoku
-    std::ifstream plik("sudoku.txt");
-    for (int i = 0; i < rozmiar_sudoku; i++)
+    //get sudoku from txt file
+    std::ifstream file("sudoku.txt");
+    for (int i = 0; i < sudoku_size; i++)
     {
-        for (int j = 0; j < rozmiar_sudoku; j++) {
-            plik >> b.plansza[i][j];
+        for (int j = 0; j < sudoku_size; j++) {
+            file >> b.sudoku_board[i][j];
         }
     }
-    b.wyswietl_tablice(); //wyświetlenie tablicy
+    b.show_board();
 
-
+    //calculations
     double startTime = CycleTimer::currentSeconds();
-    backtracking_lokalny(b);
-    double czas_koncowy = CycleTimer::currentSeconds();
+    local_backtracking(b);
+    double end_time = CycleTimer::currentSeconds();
 
 
-    std::cout << "--------------" << std::endl << "watki: " << ilosc_watkow << std::endl;
-    std::cout << "glebokosc: " << glebokosc_rekursji << std::endl;
+    std::cout << "--------------" << std::endl << "threads: " << how_many_threads << std::endl;
+    std::cout << "depth: " << recursion_depth << std::endl;
 
-    b.wyswietl_tablice();
-    std::cout  << "czas obliczen =" << czas_koncowy - startTime  << std::endl << std::endl;
+    b.show_board();
+    std::cout  << "calculation time: " << end_time - startTime  << std::endl << std::endl;
 
     return 0;
 }
