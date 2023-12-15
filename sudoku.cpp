@@ -21,7 +21,8 @@ public:
 
       void show_board()
       {
-          for (int i = 0; i < sudoku_size; i++) {
+          for (int i = 0; i < sudoku_size; i++) 
+          {
               for (int j = 0; j < sudoku_size; j++)
                   std::cout << sudoku_board[i][j] << " ";
               std::cout << std::endl;
@@ -86,6 +87,7 @@ bool backtracking(std::stack < std::pair < int, Board >>& stk, Board b, int inde
         mtx.lock();
         stk.push(std::pair < int, Board >(index, b));
         mtx.unlock();
+        //b.show_board();
         return false;
     }
 
@@ -100,19 +102,19 @@ bool backtracking(std::stack < std::pair < int, Board >>& stk, Board b, int inde
     return false;
 }
 
-void local_backtracking(Board& plansza_sudoku) {
+void local_backtracking(Board& board) {
     std::stack < std::pair < int, Board >> stk;
     std::vector < std::thread > threads;
 
     bool czy_ukonczono = false;
 
-    Board tmp(plansza_sudoku);
+    Board tmp(board);
 
     stk.push(std::pair < int, Board >(next_empty_cell_index(tmp.sudoku_board, 0), tmp));
     int index = next_empty_cell_index(tmp.sudoku_board, 0);
 
     for (int id = 0; id < how_many_threads; id++) {
-            threads.push_back(std::thread([&czy_ukonczono, id, &stk, &plansza_sudoku]() {
+            threads.push_back(std::thread([&czy_ukonczono, id, &stk, &board]() {
                 while (!czy_ukonczono) {
                     mtx.lock();
                     if (stk.size()) {
@@ -120,13 +122,12 @@ void local_backtracking(Board& plansza_sudoku) {
                         Board b = stk.top().second; //take sudoku map
                         stk.pop(); //remove first element
                         mtx.unlock();
-                        if (b.how_many_empty_cells() == 0) {
-                            plansza_sudoku = b;
+
+                        if(backtracking(stk, b, index, recursion_depth) == true){
+                            board = b;
                             czy_ukonczono = true;
                             break;
                         }
-                        backtracking(stk, b, index, recursion_depth);
-                        
                     }
                     else mtx.unlock();
                 }
@@ -144,8 +145,7 @@ int main() {
 
     //get sudoku from txt file
     std::ifstream file("sudoku.txt");
-    for (int i = 0; i < sudoku_size; i++)
-    {
+    for (int i = 0; i < sudoku_size; i++){
         for (int j = 0; j < sudoku_size; j++) {
             file >> b.sudoku_board[i][j];
         }
@@ -158,7 +158,8 @@ int main() {
     double end_time = CycleTimer::currentSeconds();
 
 
-    std::cout << "--------------" << std::endl << "threads: " << how_many_threads << std::endl;
+    std::cout << "--------------" << std::endl;
+    std::cout << "threads: " << how_many_threads << std::endl;
     std::cout << "depth: " << recursion_depth << std::endl;
 
     b.show_board();
