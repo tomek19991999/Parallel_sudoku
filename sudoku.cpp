@@ -124,7 +124,9 @@ void local_backtracking(Board& board) {
                         mtx.unlock();
 
                         if(backtracking(stk, b, index, recursion_depth) == true){
-                            board = b;
+                            mtx.lock();
+                            board = stk.top().second;
+                            mtx.unlock();
                             czy_ukonczono = true;
                             break;
                         }
